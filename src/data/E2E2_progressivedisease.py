@@ -715,9 +715,9 @@ def main():
     build_table4_normality(df).to_csv(REPORTS_DIR / "Table4_Normality.csv")
     build_table4(df).to_csv(REPORTS_DIR / "Table4.csv")
 
-    table5 = build_table5_equation_comparison(df)
-    table5.to_csv(REPORTS_DIR / "Table5_EquationComparison.csv")
-    table5.to_excel(REPORTS_DIR / "Table5_EquationComparison.xlsx")
+    build_table5_equation_comparison(df).to_csv(
+        REPORTS_DIR / "Table5_EquationComparison.csv"
+    )
 
     plt.rcParams.update({"font.size": 14})
     fig_boxplots = make_figure_boxplots(df)

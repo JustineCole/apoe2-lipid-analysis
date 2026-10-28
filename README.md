@@ -101,7 +101,7 @@ Table 1 comes from a different source:
 Plus two supporting outputs considered during analysis but not published in
 the manuscript:
 - `Table4_Normality.csv`: The normality diagnostics behind Table 4
-- `Table5_EquationComparison.csv` / `.xlsx`: A comparison of the two esVLDLC equations (`esVLDLC1`/`esVLDLC2`) by TG category and genotype
+- `Table5_EquationComparison.csv`: A comparison of the two esVLDLC equations (`esVLDLC1`/`esVLDLC2`) by TG category and genotype
 
 ## Methods
 
