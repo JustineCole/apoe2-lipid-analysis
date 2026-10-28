@@ -5,7 +5,7 @@
 
 ## Overview
 
-This repository contains the analysis code for the manuscript **"Dyslipidemia in Apolipoprotein E2 Homozygotes"** investigating lipid parameter differences between ApoE2/E2 homozygotes and individuals with no ε2 allele, across different triglyceride categories. ApoE2 heterozygotes are excluded from the comparison.
+This repository contains the analysis code for the manuscript **"Dyslipoproteinemia in Apolipoprotein E2 Homozygotes"** investigating lipid parameter differences between ApoE2/E2 homozygotes and individuals with no ε2 allele, across different triglyceride categories. ApoE2 heterozygotes are excluded from the comparison.
 
 ## Citation
 
@@ -13,8 +13,8 @@ If you use this code, please cite our paper:
 
 ```bibtex
 @article{Cole2026apoe2,
-  title={Dyslipidemia in Apolipoprotein E2 Homozygotes},
-  author={Justine Cole, Maureen Sampson, Ana Cenarro, Yeganeh Mansourian, Anna Wolska, Claire Auger, Jim Otvos, Fernando Civeira, André Tremblay, Patrick Couture, Rafael Zubiran, Alan T. Remaley, Allan D. Sniderman},
+  title={Dyslipoproteinemia in Apolipoprotein E2 Homozygotes},
+  author={Justine Cole, Maureen Sampson, Claire Auger, André J. Tremblay, Patrick Couture, Yeganeh Mansourian, Anna Wolska, Rafael Zubiran, James D. Otvos, Ana Cenarro, Fernando Civeira, Alan T. Remaley, Allan D. Sniderman},
   journal={Journal Name},
   year={2026},
   doi={your-doi}
@@ -63,7 +63,24 @@ pip install -r requirements.txt
 Due to privacy restrictions, the raw UK Biobank data cannot be shared publicly. To reproduce this analysis:
 
 1. **Apply for UK Biobank data access**: Visit [ukbiobank.ac.uk](https://www.ukbiobank.ac.uk/)
-2. **Required data fields**: `apoE genotype Combined`, `E2E2 FINAL`, `diabetes by lab or doctor`, `BMI`, `Sex`, `Age`, `Current smoker`, `Apo B`, `HDLC`, `TC`, `TG`, `NonHDLC`, `dLDLC`
+2. **Required data fields**, one row per participant:
+
+   | Column | Contents |
+   |---|---|
+   | `apoE genotype Combined` | Raw ApoE genotype call (e.g. `E2E2`, `E3E3`, `E3E4`), used to derive ε2 Status |
+   | `E2E2 FINAL` | ApoE2/E2 classification used alongside the genotype call (`E2E2` vs `Other`) |
+   | `diabetes by lab or doctor` | Diabetes diagnosis flag (1 = yes, 0 = no) |
+   | `BMI` | Body mass index (kg/m²) |
+   | `Sex` | Sex (`F`/`M`) |
+   | `Age` | Age in years |
+   | `Current smoker` | Current smoking status flag (1 = yes, 0 = no) |
+   | `Apo B` | Apolipoprotein B concentration (mg/dL) |
+   | `HDLC` | HDL cholesterol concentration (mg/dL) |
+   | `TC` | Total cholesterol concentration (mg/dL) |
+   | `TG` | Triglyceride concentration (mg/dL) |
+   | `NonHDLC` | Non-HDL cholesterol concentration (mg/dL) |
+   | `dLDLC` | Directly measured LDL cholesterol concentration (mg/dL) |
+
 3. **Place the data file** in `data/raw/`:
    - `final_E2E2_dataset.xlsx`: Processed UK Biobank dataset
 
@@ -82,10 +99,10 @@ Table 1 comes from a different source and isn't produced here):
 - `Table2_Categorical.csv`, `Table3_Numerical.csv`: Descriptive statistics by genotype (manuscript Tables 2-3)
 - `Table4.csv`: Stratified analysis by TG category (manuscript Table 4)
 - `Figure1_boxplots.png`, `Figure2_tg_category_histograms.png`: The manuscript's figures
+- `SupplementalFigure1_distributions.png`: Exploratory distributions by genotype (published as a supplemental figure)
 
-Plus three supporting outputs considered during analysis but not published
-in the manuscript:
-- `SupplementalFigure1_distributions.png`: Exploratory distributions by genotype
+Plus two supporting outputs considered during analysis but not published in
+the manuscript:
 - `Table4_Normality.csv`: The normality diagnostics behind Table 4
 - `Table5_EquationComparison.csv` / `.xlsx`: A comparison of the two esVLDLC equations (`esVLDLC1`/`esVLDLC2`) by TG category and genotype
 
@@ -143,7 +160,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Manuscript Status
 
-**Published**: [Journal link and DOI when published]
+**Submitted**: Currently under review.
 
 ---
 

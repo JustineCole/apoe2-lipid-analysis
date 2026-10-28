@@ -1,16 +1,16 @@
-"""Dyslipidemia analysis in ApoE2/E2 homozygotes (UK Biobank).
+"""Dyslipoproteinemia analysis in ApoE2/E2 homozygotes (UK Biobank).
 
 Compares lipid parameters between ApoE2/E2 homozygotes ("ε2ε2") and those
 with no ε2 allele ("No ε2") -- ApoE2 heterozygotes are excluded, since their
 lipid profile is intermediate and not the comparison of interest -- across
 three triglyceride (TG) categories.
 
-Produces the manuscript's Tables 2-4 and Figures 1-2 from the raw UK
-Biobank extract (the manuscript's Table 1 comes from a different source and
-isn't produced here), plus three supporting outputs not published in the
-manuscript: Supplemental Figure 1 (exploratory distributions),
-Table4_Normality (the normality diagnostics behind Table 4), and
-Table5_EquationComparison (a comparison of the two esVLDLC equations).
+Produces the manuscript's Tables 2-4, Figures 1-2, and Supplemental Figure 1
+from the raw UK Biobank extract (the manuscript's Table 1 comes from a
+different source and isn't produced here), plus two supporting outputs not
+published in the manuscript: Table4_Normality (the normality diagnostics
+behind Table 4) and Table5_EquationComparison (a comparison of the two
+esVLDLC equations).
 
 Derived lipid metrics
 ----------------------
