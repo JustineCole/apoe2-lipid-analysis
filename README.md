@@ -95,7 +95,7 @@ in the manuscript:
 
 1. **msLDLC / msVLDLC** (modified Sampson LDL-C / VLDL-C): Estimated LDL-C and VLDL-C using the modified Sampson equation
 2. **esVLDLC** (Estimated VLDL-C): Genotype-specific VLDL-C estimation using the enhanced Sampson equation, with `esVLDLC1`/`esVLDLC2` showing each genotype-specific equation applied to every individual for direct comparison
-3. **eApoB** (Estimated Apo B): Calculated apolipoprotein B using the Sampson equation
+3. **eApoB** (Estimated Apo B): Calculated apolipoprotein B using a novel NIH equation
 
 ### Statistical Analysis
 

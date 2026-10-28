@@ -17,13 +17,13 @@ Derived lipid metrics
 - msLDLC / msVLDLC: modified Sampson equation estimates of LDL-C and VLDL-C.
 - esVLDLC: enhanced Sampson VLDL-C estimate, using whichever of two
   equations matches the individual's own genotype. ε2ε2 individuals have
-  unusually triglyceride-rich VLDL particles, which breaks the general
+  unusually cholesterol-rich VLDL particles, which breaks the general
   population equation, hence the separate genotype-specific equations.
 - esVLDLC1 / esVLDLC2: the same two genotype-specific equations, each
   applied to every individual regardless of their genotype, so the two
   equations can be compared directly (see Table5_EquationComparison)
   rather than only ever seeing the genotype-matched value.
-- eApoB: Sampson-equation estimate of apolipoprotein B.
+- eApoB: novel NIH equation estimating ApoB.
 
 Usage
 -----
