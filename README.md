@@ -68,7 +68,6 @@ Due to privacy restrictions, the raw UK Biobank data cannot be shared publicly. 
    | Column | Contents |
    |---|---|
    | `apoE genotype Combined` | Raw ApoE genotype call (e.g. `E2E2`, `E3E3`, `E3E4`), used to derive ε2 Status |
-   | `E2E2 FINAL` | ApoE2/E2 classification used alongside the genotype call (`E2E2` vs `Other`) |
    | `diabetes by lab or doctor` | Diabetes diagnosis flag (1 = yes, 0 = no) |
    | `BMI` | Body mass index (kg/m²) |
    | `Sex` | Sex (`F`/`M`) |
@@ -76,7 +75,6 @@ Due to privacy restrictions, the raw UK Biobank data cannot be shared publicly. 
    | `Current smoker` | Current smoking status flag (1 = yes, 0 = no) |
    | `Apo B` | Apolipoprotein B concentration (mg/dL) |
    | `HDLC` | HDL cholesterol concentration (mg/dL) |
-   | `TC` | Total cholesterol concentration (mg/dL) |
    | `TG` | Triglyceride concentration (mg/dL) |
    | `NonHDLC` | Non-HDL cholesterol concentration (mg/dL) |
    | `dLDLC` | Directly measured LDL cholesterol concentration (mg/dL) |

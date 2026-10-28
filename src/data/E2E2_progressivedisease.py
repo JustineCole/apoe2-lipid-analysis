@@ -105,7 +105,6 @@ def load_data(path):
     df = df[
         [
             "apoE genotype Combined",
-            "E2E2 FINAL",
             "diabetes by lab or doctor",
             "BMI",
             "Sex",
@@ -113,16 +112,12 @@ def load_data(path):
             "Current smoker",
             "Apo B",
             "HDLC",
-            "TC",
             "TG",
             "NonHDLC",
             "dLDLC",
         ]
     ]
-    df = df.rename(
-        columns={"E2E2 FINAL": "ApoE2/E2", "Apo B": "ApoB", "dLDLC": "direct LDLC"}
-    )
-    df["ApoE2/E2"] = df["ApoE2/E2"].replace({"E2E2": "ε2ε2", "Other": "Not ε2ε2"})
+    df = df.rename(columns={"Apo B": "ApoB", "dLDLC": "direct LDLC"})
     return df
 
 
