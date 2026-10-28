@@ -91,12 +91,12 @@ python src/data/E2E2_progressivedisease.py
 ```
 
 Each table and figure is also displayed interactively as it's produced, and
-written to `reports/`. Table and figure numbers match the manuscript (whose
-Table 1 comes from a different source and isn't produced here):
-- `Table2_Categorical.csv`, `Table3_Numerical.csv`: Descriptive statistics by genotype (manuscript Tables 2-3)
-- `Table4.csv`: Stratified analysis by TG category (manuscript Table 4)
-- `Figure1_boxplots.png`, `Figure2_tg_category_histograms.png`: The manuscript's figures
-- `SupplementalFigure1_distributions.png`: Exploratory distributions by genotype (published as a supplemental figure)
+written to `reports/`. Table and figure numbers match the manuscript.
+Table 1 comes from a different source:
+- `Table2_Categorical.csv`, `Table3_Numerical.csv`: Descriptive statistics by genotype
+- `Table4.csv`: Stratified analysis by TG category
+- `Figure1_boxplots.png`, `Figure2_tg_category_histograms.png`
+- `SupplementalFigure1_distributions.png`: Exploratory distributions by genotype
 
 Plus two supporting outputs considered during analysis but not published in
 the manuscript:
@@ -107,9 +107,9 @@ the manuscript:
 
 ### Derived Lipid Metrics
 
-1. **msLDLC / msVLDLC** (modified Sampson LDL-C / VLDL-C): Estimated LDL-C and VLDL-C using the modified Sampson equation
-2. **esVLDLC** (Estimated VLDL-C): Genotype-specific VLDL-C estimation using the enhanced Sampson equation, with `esVLDLC1`/`esVLDLC2` showing each genotype-specific equation applied to every individual for direct comparison
-3. **eApoB** (Estimated Apo B): Calculated apolipoprotein B using a novel NIH equation
+1. **msLDLC / msVLDLC**: Estimated LDL-C and VLDL-C using the modified Sampson equation
+2. **esVLDLC**: Genotype-specific VLDL-C estimation using the enhanced Sampson equation, with `esVLDLC1`/`esVLDLC2` showing each genotype-specific equation applied to every individual for direct comparison
+3. **eApoB**: Calculated apolipoprotein B using a novel NIH equation
 
 ### Statistical Analysis
 
