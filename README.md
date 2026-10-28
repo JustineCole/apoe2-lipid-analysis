@@ -147,7 +147,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 - **Author**: Justine Cole
-- **Email**: justine.cole@gmail.com
 - **Institution**: McGill University Health Centre
 
 ## Acknowledgments
