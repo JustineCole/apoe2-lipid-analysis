@@ -47,8 +47,8 @@ If you use this code, please cite our paper:
 
 ```bash
 # Clone the repository
-git clone https://github.com/JustineCole/apoe2-lipidanalysis.git
-cd apoe2-lipidanalysis
+git clone https://github.com/JustineCole/apoe2-lipid-analysis.git
+cd apoe2-lipid-analysis
 
 # Create virtual environment
 python -m venv venv
