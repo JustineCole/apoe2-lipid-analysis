@@ -317,18 +317,18 @@ def build_table2(df):
 # -------------------------------------------------------------------------
 TABLE3_NUMERIC_COLUMNS = [
     "Age",
-    "ApoB",
-    "HDLC",
-    "TG",
-    "NonHDLC",
-    "msLDLC",
     "BMI",
-    "esVLDLC",
-    "esVLDLC/TG",
-    "esVLDLC/msLDLC",
+    "ApoB",
+    "NonHDLC",
+    "TG",
+    "HDLC",
+    "msLDLC",
     "ApoB/eApoB",
     "NonHDLC/ApoB",
     "TG/ApoB",
+    "esVLDLC",
+    "esVLDLC/TG",
+    "esVLDLC/msLDLC",
 ]
 TABLE3_NON_PARAMETRIC_COLUMNS = ["TG", "esVLDLC", "esVLDLC/TG", "esVLDLC/msLDLC", "TG/ApoB"]
 

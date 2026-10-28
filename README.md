@@ -77,7 +77,6 @@ Due to privacy restrictions, the raw UK Biobank data cannot be shared publicly. 
    | `HDLC` | HDL cholesterol concentration (mg/dL) |
    | `TG` | Triglyceride concentration (mg/dL) |
    | `NonHDLC` | Non-HDL cholesterol concentration (mg/dL) |
-   | `dLDLC` | Directly measured LDL cholesterol concentration (mg/dL) |
 
 3. **Place the data file** in `data/raw/`:
    - `final_E2E2_dataset.xlsx`: Processed UK Biobank dataset
