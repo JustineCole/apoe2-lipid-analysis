@@ -1,185 +1,70 @@
-import pandas as pd
-import numpy as np
+"""Dyslipidemia analysis in ApoE2/E2 homozygotes (UK Biobank).
+
+Compares lipid parameters between ApoE2/E2 homozygotes ("ε2ε2") and everyone
+else ("No ε2") -- ApoE2 heterozygotes are excluded, since their lipid profile
+is intermediate and not the comparison of interest -- across three
+triglyceride (TG) categories. Produces the manuscript's summary tables
+(Table 1-3) and figures from the raw UK Biobank extract.
+
+Derived lipid metrics
+----------------------
+- msLDLC / msVLDLC: modified Sampson equation estimates of LDL-C and VLDL-C.
+- esVLDLC: enhanced Sampson VLDL-C estimate, using whichever of two
+  equations matches the individual's own genotype. ε2ε2 individuals have
+  unusually triglyceride-rich VLDL particles, which breaks the general
+  population equation, hence the separate genotype-specific equations.
+- esVLDLC1 / esVLDLC2: the same two genotype-specific equations, each
+  applied to every individual regardless of their genotype, so the two
+  equations can be compared directly (see Table 3) rather than only ever
+  seeing the genotype-matched value.
+- eApoB: Sampson-equation estimate of apolipoprotein B.
+
+Usage
+-----
+    python E2E2_progressivedisease.py
+
+Run from anywhere -- paths are resolved relative to this file, not the
+current working directory. Expects the raw data at
+``data/raw/final_E2E2_dataset.xlsx`` (see README for how to obtain it) and
+writes all tables/figures to ``reports/``.
+"""
+
+import sys
+from pathlib import Path
+
 import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
+import pandas as pd
 import scipy.stats as stats
+import seaborn as sns
 
-# -------------------------------------------------------
-# Read Excel files
-# -------------------------------------------------------
-UKB_E2df = pd.read_excel("../../data/raw/final_E2E2_dataset.xlsx")
-UKB_E2df.head()
-UKB_E2df["BP meds at baseline"].value_counts()
-UKB_E2df["Age"].describe()
-UKB_E2df = UKB_E2df[
-    [
-        "apoE genotype Combined",
-        "E2E2 FINAL",
-        "diabetes by lab or doctor",
-        "BMI",
-        "Sex",
-        "Age",
-        "Current smoker",
-        "Apo B",
-        "HDLC",
-        "TC",
-        "TG",
-        "NonHDLC",
-        "dLDLC",
-    ]
-]
-UKB_E2df = UKB_E2df.rename(
-    columns={"E2E2 FINAL": "ApoE2/E2", "Apo B": "ApoB", "dLDLC": "direct LDLC"}
-)
-UKB_E2df["ApoE2/E2"] = UKB_E2df["ApoE2/E2"].replace(
-    {"E2E2": "ε2ε2", "Other": "Not ε2ε2"}
-)
+# Windows consoles default to a legacy encoding that can't print the "ε"
+# characters used throughout this script's output; force UTF-8 so running
+# `python E2E2_progressivedisease.py` doesn't crash partway through.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
-# -------------------------------------------------------
-# Create ApoE2 Heterozygote and ε2 Status columns
-# -------------------------------------------------------
-## Create ApoE2 Heterozygote column
-# 1. Define the conditions
-# Contains 'E2' AND does NOT contain 'E2E2'
-mask = (UKB_E2df["apoE genotype Combined"].str.contains("E2")) & (
-    ~UKB_E2df["apoE genotype Combined"].str.contains("E2E2")
-)
+# -------------------------------------------------------------------------
+# Paths (resolved relative to this file so the script works regardless of
+# the caller's working directory)
+# -------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_PATH = REPO_ROOT / "data" / "raw" / "final_E2E2_dataset.xlsx"
+REPORTS_DIR = REPO_ROOT / "reports"
 
-# 2. Assign 1 if True, 0 if False
-UKB_E2df["E2 Heterozygote"] = np.where(mask, 1, 0)
-UKB_E2df["E2 Heterozygote"].value_counts()
-## Create ε2 Status column
-# 1. Define your conditions
-conditions = [
-    UKB_E2df["apoE genotype Combined"].str.contains("E2E2"),  # Two copies
-    UKB_E2df["apoE genotype Combined"].str.contains(
-        "E2"
-    ),  # One copy (E2E2 is already caught above)
-]
+# -------------------------------------------------------------------------
+# Shared constants
+# -------------------------------------------------------------------------
+GENOTYPE_COL = "ε2 Status"
+EPSILON2_HOMOZYGOTE = "ε2ε2"
+NO_EPSILON2 = "No ε2"
 
-# 2. Define the corresponding labels
-choices = ["ε2ε2", "ε2"]
+TG_CATEGORY_BINS = [0, 180, 350, np.inf]
+TG_CATEGORY_LABELS = ["TG <180 mg/dL", "TG 180-349 mg/dL", "TG ≥350 mg/dL"]
 
-# 3. Apply the logic (default is 'No ε2')
-UKB_E2df["ε2 Status"] = np.select(conditions, choices, default="No ε2")
-UKB_E2df["ε2 Status"].value_counts()
-
-# -------------------------------------------------------
-# Clean Dataframe
-# -------------------------------------------------------
-## Remove heterozygotes
-UKB_E2df = UKB_E2df[UKB_E2df["E2 Heterozygote"] == 0]
-
-UKB_E2_df = UKB_E2df[
-    [
-        "ε2 Status",
-        "ApoB",
-        "HDLC",
-        "TG",
-        "NonHDLC",
-        "direct LDLC",
-        "Age",
-        "Sex",
-        "BMI",
-        "Current smoker",
-        "diabetes by lab or doctor",
-    ]
-]
-
-
-# -------------------------------------------------------
-# Feature Creation
-# -------------------------------------------------------
-## Create msLDLC
-UKB_E2_df["msLDLC"] = (
-    UKB_E2_df["NonHDLC"]
-    - (UKB_E2_df["TG"] / 8.37)
-    - (UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"] / 2640)
-    + (UKB_E2_df["TG"] ** 2 / 17400)
-)
-
-## Create msVLDLC
-UKB_E2_df["msVLDLC"] = (
-    (UKB_E2_df["TG"] / 8.37)
-    + (UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"] / 2640)
-    - (UKB_E2_df["TG"] ** 2 / 17400)
-)
-
-
-# Create esVLDLC using alternative equations for non-ApoE2/E2 individuals and ApoE2/E2 individuals:
-UKB_E2_df["esVLDLC"] = np.select(
-    condlist=[UKB_E2_df["ε2 Status"] == "No ε2", UKB_E2_df["ε2 Status"] == "ε2ε2"],
-    choicelist=[
-        (UKB_E2_df["NonHDLC"] / 3.81)
-        - (UKB_E2_df["HDLC"] / 8.93)
-        + (UKB_E2_df["TG"] / 7.73)
-        + (UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"] / 2050)
-        - (UKB_E2_df["TG"] ** 2 / 13300)
-        - (UKB_E2_df["ApoB"] / 2.49)
-        - (UKB_E2_df["ApoB"] * UKB_E2_df["TG"] / 3550)
-        + 7.46,
-        (0.001 * UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"])
-        - (0.526 * UKB_E2_df["ApoB"])
-        + (0.318 * UKB_E2_df["TG"])
-        - (0.0004 * UKB_E2_df["TG"] ** 2)
-        + 38.025,
-    ],
-    default=np.nan,
-)
-
-
-UKB_E2_df["esVLDLC"] = np.where(UKB_E2_df["esVLDLC"] < 0, 0, UKB_E2_df["esVLDLC"])
-
-# Create esVLDLC1 and esVLDLC2: the same two equations above, but each applied
-# to every row (not just the genotype they were derived for), so they can be
-# compared directly instead of only taking the genotype-matched value.
-UKB_E2_df["esVLDLC1"] = (  # equation used for "No ε2"
-    (UKB_E2_df["NonHDLC"] / 3.81)
-    - (UKB_E2_df["HDLC"] / 8.93)
-    + (UKB_E2_df["TG"] / 7.73)
-    + (UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"] / 2050)
-    - (UKB_E2_df["TG"] ** 2 / 13300)
-    - (UKB_E2_df["ApoB"] / 2.49)
-    - (UKB_E2_df["ApoB"] * UKB_E2_df["TG"] / 3550)
-    + 7.46
-)
-UKB_E2_df["esVLDLC1"] = np.where(UKB_E2_df["esVLDLC1"] < 0, 0, UKB_E2_df["esVLDLC1"])
-
-UKB_E2_df["esVLDLC2"] = (  # equation used for "ε2ε2"
-    (0.001 * UKB_E2_df["NonHDLC"] * UKB_E2_df["TG"])
-    - (0.526 * UKB_E2_df["ApoB"])
-    + (0.318 * UKB_E2_df["TG"])
-    - (0.0004 * UKB_E2_df["TG"] ** 2)
-    + 38.025
-)
-UKB_E2_df["esVLDLC2"] = np.where(UKB_E2_df["esVLDLC2"] < 0, 0, UKB_E2_df["esVLDLC2"])
-
-# Create eApoB
-UKB_E2_df["eApoB"] = (
-    (UKB_E2_df["NonHDLC"] / 1.90)
-    - (UKB_E2_df["TG"] / 22.5)
-    + (2.75 * (UKB_E2_df["NonHDLC"] / UKB_E2_df["HDLC"]))
-    + (UKB_E2_df["TG"] * UKB_E2_df["NonHDLC"] / 12200)
-    - (UKB_E2_df["TG"] ** 2 / 50400)
-    + 13.0
-)
-
-
-# Create ratios
-UKB_E2_df["esVLDLC/TG"] = UKB_E2_df["esVLDLC"] / UKB_E2_df["TG"]
-UKB_E2_df["esVLDLC/msLDLC"] = UKB_E2_df["esVLDLC"] / UKB_E2_df["msLDLC"]
-UKB_E2_df["msLDLC/dLDLC"] = UKB_E2_df["msLDLC"] / UKB_E2_df["direct LDLC"]
-UKB_E2_df["ApoB/eApoB"] = UKB_E2_df["ApoB"] / UKB_E2_df["eApoB"]
-UKB_E2_df["nonHDLC/ApoB"] = UKB_E2_df["NonHDLC"] / UKB_E2_df["ApoB"]
-UKB_E2_df["TG/ApoB"] = UKB_E2_df["TG"] / UKB_E2_df["ApoB"]
-
-
-# -------------------------------------------------------
-# Display label helper
-# -------------------------------------------------------
-# Column/variable names use short internal abbreviations (e.g. "msLDLC").
-# This maps them to publication-style labels for figure axes and table
-# headers/indices without renaming the underlying DataFrame columns.
+# Column/ratio names use short internal abbreviations (e.g. "msLDLC"). This
+# maps them to publication-style labels for figure axes and table
+# headers/indices, without renaming the underlying DataFrame columns.
 DISPLAY_LABEL_REPLACEMENTS = [
     ("esVLDLC", "VLDL-C"),
     ("msLDLC", "LDL-C"),
@@ -190,275 +75,291 @@ DISPLAY_LABEL_REPLACEMENTS = [
 
 
 def display_label(name):
+    """Map an internal column/ratio name to a publication-style label."""
     label = name
     for old, new in DISPLAY_LABEL_REPLACEMENTS:
         label = label.replace(old, new)
     return label
 
 
-# -------------------------------------------------------
-# Explore Data - Table 1
-# -------------------------------------------------------
-
-# Table 1 Normality Tests
-## Histograms to visualize distributions
-
-"""for col in [
-    "Age",
-    "ApoB",
-    "HDLC",
-    "TG",
-    "NonHDLC",
-    "msLDLC",
-    "BMI",
-    "esVLDLC",
-    "esVLDLC/TG",
-    "esVLDLC/msLDLC",
-    "ApoB/eApoB",
-    "nonHDLC/ApoB",
-    "TG/ApoB",
-]:
-    plt.figure(figsize=(10, 6))
-    sns.histplot(
-        data=UKB_E2_df,
-        x=col,
-        hue="ε2 Status",
-        stat="density",
-        common_norm=False,
-        multiple="layer",
-        kde=True,
-        bins=30,
-        alpha=0.4,
-    )
-    plt.title(f"Distribution of {col} by ApoE2/E2 Status")
-    plt.xlabel(col)
-    plt.ylabel("Density")
-    plt.legend(title="Genotype", labels=["ε2ε2", "No ε2"])
-    plt.show()"""
+def format_p_value(p):
+    """Format a p-value for display: blank if missing, "<0.0001" if tiny."""
+    if pd.isna(p):
+        return ""
+    if p < 0.0001:
+        return "<0.0001"
+    return f"{p:.4f}"
 
 
-# -------------------------------------------------------
-# Create histplots of "TG", "ApoB", "NonHDLC", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/TG" by ApoE2/E2 status
-# -------------------------------------------------------
-plt.rcParams.update({"font.size": 18})
-LEGEND_TITLE = "Genotype"
-PARAMETERS = ["TG", "ApoB", "NonHDLC", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/TG"]
-# Create 4x3 grid (4 rows for parameters, 3 columns for categories)
-fig, axes = plt.subplots(3, 2, figsize=(22, 24))
-all_axes = axes.flatten()
-
-
-SUBPLOT_LABELS = ["A", "B", "C", "D", "E", "F"]
-
-# --- Plotting Loop ---
-for i, (ax, y_col) in enumerate(zip(all_axes, PARAMETERS)):
-    # Create the boxplot without outliers
-    sns.histplot(
-        data=UKB_E2_df,
-        x=PARAMETERS[i],
-        hue="ε2 Status",
-        element="step",
-        stat="density",
-        common_norm=False,
-        ax=ax,
-    )
-
-    ax.set_title(SUBPLOT_LABELS[i], fontsize=14, pad=8, loc="left", fontweight="bold")
-    ax.set_xlabel(display_label(y_col))
-    ax.set_ylabel("")
-
-plt.tight_layout()
-plt.subplots_adjust(hspace=0.16)
-plt.show()
-
-
-## Check for Skewness and Kurtosis and Perform Shapiro-Wilk test for normality
-for col in [
-    "Age",
-    "ApoB",
-    "HDLC",
-    "TG",
-    "NonHDLC",
-    "msLDLC",
-    "BMI",
-    "esVLDLC",
-    "esVLDLC/TG",
-    "esVLDLC/msLDLC",
-    "ApoB/eApoB",
-    "nonHDLC/ApoB",
-    "TG/ApoB",
-]:
-    # --- Prepare Data ---
-    group1 = UKB_E2_df[UKB_E2_df["ε2 Status"] == "ε2ε2"][col].dropna()
-    group2 = UKB_E2_df[UKB_E2_df["ε2 Status"] == "No ε2"][col].dropna()
-
-    # --- Skewness and Kurtosis ---
-    skew1 = stats.skew(group1)
-    kurt1 = stats.kurtosis(group1)  # Fisher's kurtosis (Normal = 0)
-    skew2 = stats.skew(group2)
-    kurt2 = stats.kurtosis(group2)
-
-    # --- Print Results ---
-    print(f"--- Results for **{col}** ---")
-
-    print(f"**Descriptive Statistics (Skew/Kurtosis):**")
-    print(f" Group 1 (ε2ε2): Skew={skew1:.4f}, Kurtosis (Fisher)={kurt1:.4f}")
-    print(f" Group 2 (No ε2): Skew={skew2:.4f}, Kurtosis (Fisher)={kurt2:.4f}")
-
-    # --- Shapiro-Wilk Test (from your original code) ---
-    w_stat1, p_value1 = stats.shapiro(group1)
-    w_stat2, p_value2 = stats.shapiro(group2)
-    print(f"**Shapiro-Wilk Test:**")
-    print(f" Group 1: W={w_stat1:.4f}, p={p_value1:.4f}")
-    print(f" Group 2: W={w_stat2:.4f}, p={p_value2:.4f}\n")
-
-### -------------------------------------------------------
-### Create Table 1b - Numerical Variables
-### -------------------------------------------------------
-
-# Define non-parametric columns
-non_parametric = ["TG", "esVLDLC", "esVLDLC/TG", "esVLDLC/msLDLC", "TG/ApoB"]
-
-# Create the base table
-table1 = (
-    UKB_E2_df[
+# -------------------------------------------------------------------------
+# Data loading and feature engineering
+# -------------------------------------------------------------------------
+def load_data(path):
+    """Load the raw UK Biobank extract and keep only the columns used here."""
+    df = pd.read_excel(path)
+    df = df[
         [
+            "apoE genotype Combined",
+            "E2E2 FINAL",
+            "diabetes by lab or doctor",
+            "BMI",
+            "Sex",
             "Age",
+            "Current smoker",
+            "Apo B",
+            "HDLC",
+            "TC",
+            "TG",
+            "NonHDLC",
+            "dLDLC",
+        ]
+    ]
+    df = df.rename(
+        columns={"E2E2 FINAL": "ApoE2/E2", "Apo B": "ApoB", "dLDLC": "direct LDLC"}
+    )
+    df["ApoE2/E2"] = df["ApoE2/E2"].replace({"E2E2": "ε2ε2", "Other": "Not ε2ε2"})
+    return df
+
+
+def add_genotype_columns(df):
+    """Flag ApoE2 heterozygotes and classify each row's ε2 Status.
+
+    "E2 Heterozygote" is 1 for one copy of the E2 allele (E2E2 individuals
+    have two and are not heterozygotes). GENOTYPE_COL distinguishes ε2ε2
+    homozygotes, lone-ε2 heterozygotes, and everyone else; heterozygotes are
+    dropped later since their profile is intermediate and not of interest.
+    """
+    has_e2 = df["apoE genotype Combined"].str.contains("E2")
+    has_e2e2 = df["apoE genotype Combined"].str.contains("E2E2")
+
+    df["E2 Heterozygote"] = np.where(has_e2 & ~has_e2e2, 1, 0)
+    df[GENOTYPE_COL] = np.select(
+        condlist=[has_e2e2, has_e2],  # two copies checked before one copy
+        choicelist=[EPSILON2_HOMOZYGOTE, "ε2"],
+        default=NO_EPSILON2,
+    )
+    return df
+
+
+def clean_cohort(df):
+    """Drop ApoE2 heterozygotes and keep only the columns used downstream."""
+    df = df[df["E2 Heterozygote"] == 0]
+    return df[
+        [
+            GENOTYPE_COL,
             "ApoB",
             "HDLC",
             "TG",
             "NonHDLC",
-            "msLDLC",
+            "direct LDLC",
+            "Age",
+            "Sex",
             "BMI",
-            "ε2 Status",
-            "esVLDLC",
-            "esVLDLC/TG",
-            "esVLDLC/msLDLC",
-            "ApoB/eApoB",
-            "nonHDLC/ApoB",
-            "TG/ApoB",
+            "Current smoker",
+            "diabetes by lab or doctor",
         ]
-    ]
-    .groupby("ε2 Status")
-    .describe()
-    .T
-)
-
-# Calculate p-values
-p_values = []
-variables = [col for col in table1.index.get_level_values(0).unique()]
-
-for var in variables:
-    # Get data for each group
-    group1 = UKB_E2_df[UKB_E2_df["ε2 Status"] == UKB_E2_df["ε2 Status"].unique()[0]][
-        var
-    ].dropna()
-    group2 = UKB_E2_df[UKB_E2_df["ε2 Status"] == UKB_E2_df["ε2 Status"].unique()[1]][
-        var
-    ].dropna()
-
-    # Choose appropriate test
-    if var in non_parametric:
-        # Mann-Whitney U test for non-parametric
-        _, p_val = stats.mannwhitneyu(group1, group2, alternative="two-sided")
-    else:
-        # Independent t-test for parametric
-        _, p_val = stats.ttest_ind(group1, group2, equal_var=False)
-
-    # Add p-value for each statistic row (mean, std, min, etc.)
-    num_stats = len(table1.loc[var])
-    p_values.extend([p_val] * num_stats)
-
-# Add p-values to table
-table1["p-value"] = p_values
-
-table1 = table1.rename(index=display_label, level=0)
-table1.to_csv("../../reports/Table1b_Numerical.csv")
-
-### -------------------------------------------------------
-### Create Table 1a - Categorical Variables
-### -------------------------------------------------------
-# 1. Define the columns we want to summarize
-cols_to_summary = ["Sex", "Current smoker", "diabetes by lab or doctor"]
+    ].copy()
 
 
-# 2. Create a helper function to get counts and percentages
-def summarize_group(group):
-    results = {}
-    for col in cols_to_summary:
-        # Define what counts as a "positive" case for each column
-        if col == "Sex":
-            count = (group[col] == "F").sum()
+def engineer_features(df):
+    """Add derived LDL-C/VLDL-C/ApoB estimates, ratios, and the TG category."""
+    df["msLDLC"] = (
+        df["NonHDLC"]
+        - (df["TG"] / 8.37)
+        - (df["NonHDLC"] * df["TG"] / 2640)
+        + (df["TG"] ** 2 / 17400)
+    )
+    df["msVLDLC"] = (
+        (df["TG"] / 8.37)
+        + (df["NonHDLC"] * df["TG"] / 2640)
+        - (df["TG"] ** 2 / 17400)
+    )
+
+    # Two alternative equations for VLDL-C, calibrated for different genotypes.
+    no_e2_equation = (
+        (df["NonHDLC"] / 3.81)
+        - (df["HDLC"] / 8.93)
+        + (df["TG"] / 7.73)
+        + (df["NonHDLC"] * df["TG"] / 2050)
+        - (df["TG"] ** 2 / 13300)
+        - (df["ApoB"] / 2.49)
+        - (df["ApoB"] * df["TG"] / 3550)
+        + 7.46
+    )
+    e2e2_equation = (
+        (0.001 * df["NonHDLC"] * df["TG"])
+        - (0.526 * df["ApoB"])
+        + (0.318 * df["TG"])
+        - (0.0004 * df["TG"] ** 2)
+        + 38.025
+    )
+
+    # esVLDLC: each individual's own genotype-matched equation.
+    esvldlc = np.select(
+        condlist=[df[GENOTYPE_COL] == NO_EPSILON2, df[GENOTYPE_COL] == EPSILON2_HOMOZYGOTE],
+        choicelist=[no_e2_equation, e2e2_equation],
+        default=np.nan,
+    )
+    df["esVLDLC"] = np.where(esvldlc < 0, 0, esvldlc)
+
+    # esVLDLC1/esVLDLC2: both equations applied to every row, for comparison.
+    df["esVLDLC1"] = np.where(no_e2_equation < 0, 0, no_e2_equation)
+    df["esVLDLC2"] = np.where(e2e2_equation < 0, 0, e2e2_equation)
+
+    df["eApoB"] = (
+        (df["NonHDLC"] / 1.90)
+        - (df["TG"] / 22.5)
+        + (2.75 * (df["NonHDLC"] / df["HDLC"]))
+        + (df["TG"] * df["NonHDLC"] / 12200)
+        - (df["TG"] ** 2 / 50400)
+        + 13.0
+    )
+
+    df["esVLDLC/TG"] = df["esVLDLC"] / df["TG"]
+    df["esVLDLC/msLDLC"] = df["esVLDLC"] / df["msLDLC"]
+    df["msLDLC/dLDLC"] = df["msLDLC"] / df["direct LDLC"]
+    df["ApoB/eApoB"] = df["ApoB"] / df["eApoB"]
+    df["nonHDLC/ApoB"] = df["NonHDLC"] / df["ApoB"]
+    df["TG/ApoB"] = df["TG"] / df["ApoB"]
+
+    df["TG_category"] = pd.cut(
+        df["TG"], bins=TG_CATEGORY_BINS, labels=TG_CATEGORY_LABELS
+    )
+    return df
+
+
+# -------------------------------------------------------------------------
+# Console diagnostics: skewness/kurtosis and Shapiro-Wilk, by genotype
+# -------------------------------------------------------------------------
+NORMALITY_DIAGNOSTIC_COLUMNS = [
+    "Age",
+    "ApoB",
+    "HDLC",
+    "TG",
+    "NonHDLC",
+    "msLDLC",
+    "BMI",
+    "esVLDLC",
+    "esVLDLC/TG",
+    "esVLDLC/msLDLC",
+    "ApoB/eApoB",
+    "nonHDLC/ApoB",
+    "TG/ApoB",
+]
+
+
+def print_normality_diagnostics(df, columns):
+    """Print skewness/kurtosis and a Shapiro-Wilk test for each column."""
+    for col in columns:
+        group1 = df[df[GENOTYPE_COL] == EPSILON2_HOMOZYGOTE][col].dropna()
+        group2 = df[df[GENOTYPE_COL] == NO_EPSILON2][col].dropna()
+
+        skew1, kurt1 = stats.skew(group1), stats.kurtosis(group1)
+        skew2, kurt2 = stats.skew(group2), stats.kurtosis(group2)
+
+        print(f"--- Results for **{col}** ---")
+        print("**Descriptive Statistics (Skew/Kurtosis):**")
+        print(
+            f" Group 1 ({EPSILON2_HOMOZYGOTE}): Skew={skew1:.4f}, "
+            f"Kurtosis (Fisher)={kurt1:.4f}"
+        )
+        print(
+            f" Group 2 ({NO_EPSILON2}): Skew={skew2:.4f}, "
+            f"Kurtosis (Fisher)={kurt2:.4f}"
+        )
+
+        w_stat1, p_value1 = stats.shapiro(group1)
+        w_stat2, p_value2 = stats.shapiro(group2)
+        print("**Shapiro-Wilk Test:**")
+        print(f" Group 1: W={w_stat1:.4f}, p={p_value1:.4f}")
+        print(f" Group 2: W={w_stat2:.4f}, p={p_value2:.4f}\n")
+
+
+# -------------------------------------------------------------------------
+# Table 1a: categorical variables by genotype
+# -------------------------------------------------------------------------
+def build_table1a(df):
+    """Counts/percentages for categorical variables by genotype, with chi-squared p-values."""
+    cols_to_summarize = ["Sex", "Current smoker", "diabetes by lab or doctor"]
+
+    def summarize_group(group):
+        results = {}
+        for col in cols_to_summarize:
+            if col == "Sex":
+                count = (group[col] == "F").sum()
+            else:
+                count = (group[col] == 1).sum()
+            results[(col, "Count")] = count
+            results[(col, "Percentage")] = f"{(count / len(group)) * 100:.0f}%"
+        return pd.Series(results)
+
+    summary_df = df.groupby(GENOTYPE_COL).apply(summarize_group).T
+
+    p_values = {}
+    for col in cols_to_summarize:
+        contingency_table = pd.crosstab(df[col], df[GENOTYPE_COL])
+        _, p, _, _ = stats.chi2_contingency(contingency_table)
+        p_values[col] = p
+
+    p_value_series = pd.Series(
+        [p_values[col] for col in cols_to_summarize],
+        index=pd.MultiIndex.from_product([cols_to_summarize, ["p-value"]]),
+    )
+
+    summary_df_with_p = pd.concat(
+        [summary_df, p_value_series.to_frame("p-value")], axis=0
+    )
+    return summary_df_with_p.sort_index(level=0)
+
+
+# -------------------------------------------------------------------------
+# Table 1b: numerical variables by genotype
+# -------------------------------------------------------------------------
+TABLE1B_NUMERIC_COLUMNS = [
+    "Age",
+    "ApoB",
+    "HDLC",
+    "TG",
+    "NonHDLC",
+    "msLDLC",
+    "BMI",
+    "esVLDLC",
+    "esVLDLC/TG",
+    "esVLDLC/msLDLC",
+    "ApoB/eApoB",
+    "nonHDLC/ApoB",
+    "TG/ApoB",
+]
+TABLE1B_NON_PARAMETRIC_COLUMNS = ["TG", "esVLDLC", "esVLDLC/TG", "esVLDLC/msLDLC", "TG/ApoB"]
+
+
+def build_table1b(df):
+    """Descriptive stats (mean/SD etc.) for numeric variables by genotype, with p-values."""
+    table1 = (
+        df[[GENOTYPE_COL] + TABLE1B_NUMERIC_COLUMNS].groupby(GENOTYPE_COL).describe().T
+    )
+
+    genotypes = df[GENOTYPE_COL].unique()
+    p_values = []
+    for var in table1.index.get_level_values(0).unique():
+        group1 = df[df[GENOTYPE_COL] == genotypes[0]][var].dropna()
+        group2 = df[df[GENOTYPE_COL] == genotypes[1]][var].dropna()
+
+        if var in TABLE1B_NON_PARAMETRIC_COLUMNS:
+            _, p_val = stats.mannwhitneyu(group1, group2, alternative="two-sided")
         else:
-            # Using str comparison if your data is cast to string, or int if not
-            count = (group[col] == 1).sum()
+            _, p_val = stats.ttest_ind(group1, group2, equal_var=False)
 
-        percentage = (count / len(group)) * 100
-        results[(col, "Count")] = count
-        results[(col, "Percentage")] = f"{percentage:.0f}%"
-    return pd.Series(results)
+        p_values.extend([p_val] * len(table1.loc[var]))
 
-
-# 3. Group by ApoE2/E2 and apply the function
-summary_df = UKB_E2_df.groupby("ε2 Status").apply(summarize_group).T
-
-### Perform chi-squared tests to compare proportions between ApoE2/E2 and not ApoE2/E2 groups
-Categorical_Variable = []
-Chi2_statistic = []
-P_value = []
-for col in cols_to_summary:
-    contingency_table = pd.crosstab(UKB_E2_df[col], UKB_E2_df["ε2 Status"])
-    chi2, p, df, expected = stats.chi2_contingency(contingency_table)
-    Categorical_Variable.append(col)
-    Chi2_statistic.append(chi2)
-    P_value.append(p)
-
-stats2 = pd.DataFrame(
-    {
-        "Variable": Categorical_Variable,
-        "chi2-statistic": Chi2_statistic,
-        "p-value": P_value,
-    }
-)
-
-# 4. Add p-values to the summary table
-# Create a MultiIndex for the p-value column to match summary_df structure
-p_value_series = pd.Series(
-    [
-        stats2.loc[stats2["Variable"] == col, "p-value"].values[0]
-        for col in cols_to_summary
-    ],
-    index=pd.MultiIndex.from_product([cols_to_summary, ["p-value"]]),
-)
-
-# Concatenate with the summary dataframe
-summary_df_with_p = pd.concat([summary_df, p_value_series.to_frame("p-value")], axis=0)
-
-# Sort the index to group each variable's statistics together
-summary_df_with_p = summary_df_with_p.sort_index(level=0)
-
-# 5. Save the summary dataframe with p-values to CSV
-summary_df_with_p.to_csv("../../reports/Table1a_Categorical.csv")
-
-# -------------------------------------------------------
-# Table 2
-# -------------------------------------------------------
-# -------------------------------------------------------
-# Create TG categories
-# -------------------------------------------------------
-UKB_E2_df["TG_category"] = pd.cut(
-    UKB_E2_df["TG"],
-    bins=[0, 180, 350, np.inf],
-    labels=["TG <180 mg/dL", "TG 180-349 mg/dL", "TG ≥350 mg/dL"],
-)
-UKB_E2_df["TG_category"].value_counts()
+    table1["p-value"] = p_values
+    return table1.rename(index=display_label, level=0)
 
 
-### Test for normality using Shapiro-Wilk test
-# ==============================================================================
-# 1. Define Metrics and Groups (Adjust this list if your column names differ)
-# ==============================================================================
-metrics = [
+# -------------------------------------------------------------------------
+# Table 2 (normality diagnostics): Shapiro-Wilk by TG category and genotype
+# -------------------------------------------------------------------------
+TABLE2_METRICS = [
     "ApoB",
     "TG",
     "NonHDLC",
@@ -470,106 +371,68 @@ metrics = [
     "nonHDLC/ApoB",
     "TG/ApoB",
 ]
-tg_categories = ["TG <180 mg/dL", "TG 180-349 mg/dL", "TG ≥350 mg/dL"]
 
 
-# ==============================================================================
-# 3. Perform Shapiro-Wilk Test
-# ==============================================================================
-results = []
+def build_table2_normality(df):
+    """Shapiro-Wilk normality diagnostics for key metrics, by TG category and genotype."""
+    results = []
+    for metric in TABLE2_METRICS:
+        row = {"Metric": metric}
+        for tg_cat in TG_CATEGORY_LABELS:
+            df_group_tg = df[df["TG_category"] == tg_cat]
+            for genotype in df[GENOTYPE_COL].unique():
+                data = df_group_tg[df_group_tg[GENOTYPE_COL] == genotype][metric].dropna()
+                col_prefix = f"({tg_cat}, {genotype})"
 
-for metric in metrics:
-    row = {"Metric": metric}
+                row[f"{col_prefix}_Skewness"] = stats.skew(data)
+                row[f"{col_prefix}_Kurtosis"] = stats.kurtosis(data, fisher=True)
+                try:
+                    w_stat, p_value = stats.shapiro(data)
+                except Exception:
+                    w_stat, p_value = np.nan, np.nan
+                row[f"{col_prefix}_W"] = w_stat
+                row[f"{col_prefix}_p"] = p_value
+        results.append(row)
 
-    for tg_cat in tg_categories:
-        # Filter by TG Category
-        df_group_tg = UKB_E2_df[UKB_E2_df["TG_category"] == tg_cat]
+    df_results = pd.DataFrame(results).set_index("Metric")
 
-        for genotype in UKB_E2_df["ε2 Status"].unique():
-            # Filter by Genotype (1 or 0)
-            data = df_group_tg[df_group_tg["ε2 Status"] == genotype][metric].dropna()
+    column_tuples = []
+    for tg_cat in TG_CATEGORY_LABELS:
+        for genotype_name in [EPSILON2_HOMOZYGOTE, NO_EPSILON2]:
+            column_tuples.append((tg_cat, f"{genotype_name} Skewness"))
+            column_tuples.append((tg_cat, f"{genotype_name} Kurtosis"))
+            column_tuples.append((tg_cat, f"{genotype_name} W"))
+            column_tuples.append((tg_cat, f"{genotype_name} p"))
+    df_results.columns = pd.MultiIndex.from_tuples(
+        column_tuples, names=["TG Group", "Statistic"]
+    )
 
-            # Subgroup label for the result table
-            col_prefix = f"({tg_cat}, {genotype})"
-
-            # --- Skewness and Kurtosis Calculation ---
-            # Skewness: measures asymmetry of the distribution
-            skewness = stats.skew(data)
-            # Kurtosis: measures the 'tailedness' of the distribution.
-            # Use 'fisher' for standard comparison (Normal distribution has kurtosis of 0)
-            kurtosis = stats.kurtosis(data, fisher=True)
-
-            # --- Shapiro-Wilk Test (assuming len(data) >= 3 is always true or handled by try/except) ---
-            try:
-                w_stat, p_value = stats.shapiro(data)
-            except Exception:
-                w_stat, p_value = np.nan, np.nan
-
-            # --- Store Results ---
-            row[f"{col_prefix}_Skewness"] = skewness
-            row[f"{col_prefix}_Kurtosis"] = kurtosis
-            row[f"{col_prefix}_W"] = w_stat
-            row[f"{col_prefix}_p"] = p_value
-
-    results.append(row)
-
-# Convert results list to DataFrame
-df_results = pd.DataFrame(results).set_index("Metric")
-
-# Create the MultiIndex for the columns for a clear structure
-column_tuples = []
-for tg_cat in tg_categories:
-    for genotype_name in ["ε2ε2", "No ε2"]:
-        # Order the statistics for better readability: Skewness, Kurtosis, W, p
-        column_tuples.append((tg_cat, f"{genotype_name} Skewness"))
-        column_tuples.append((tg_cat, f"{genotype_name} Kurtosis"))
-        column_tuples.append((tg_cat, f"{genotype_name} W"))
-        column_tuples.append((tg_cat, f"{genotype_name} p"))
-
-df_results.columns = pd.MultiIndex.from_tuples(
-    column_tuples, names=["TG Group", "Statistic"]
-)
-
-# Rename the final DataFrame for clarity on its contents
-df_normality_stats = df_results
-
-
-# ==============================================================================
-# 4. Apply Formatting
-# ==============================================================================
-
-# Format p-values and other statistics
-df_normality = df_normality_stats.copy()
-
-for col in df_normality.columns:
-    statistic_name = col[1]
-
-    if statistic_name.endswith("p"):
-        # --- Format p-values (ending in 'p') ---
-        df_normality[col] = df_normality[col].apply(
-            lambda p: (
-                f"{p:.4f}"
-                if pd.notna(p) and p >= 0.0001
-                else "<0.0001" if pd.notna(p) and p < 0.0001 else ""
+    df_normality = df_results.copy()
+    for col in df_normality.columns:
+        statistic_name = col[1]
+        if statistic_name.endswith("p"):
+            df_normality[col] = df_normality[col].apply(
+                lambda p: (
+                    f"{p:.4f}"
+                    if pd.notna(p) and p >= 0.0001
+                    else "<0.0001" if pd.notna(p) and p < 0.0001 else ""
+                )
             )
-        )
-    # Check for W, Skewness, or Kurtosis
-    elif (
-        statistic_name.endswith("W")
-        or "Skewness" in statistic_name
-        or "Kurtosis" in statistic_name
-    ):
-        # --- Format W-statistic, Skewness, and Kurtosis to 3 decimal places ---
-        df_normality[col] = df_normality[col].round(3).astype(str).replace("nan", "")
+        elif (
+            statistic_name.endswith("W")
+            or "Skewness" in statistic_name
+            or "Kurtosis" in statistic_name
+        ):
+            df_normality[col] = df_normality[col].round(3).astype(str).replace("nan", "")
 
-df_normality.index = df_normality.index.map(display_label)
-df_normality.to_csv("../../reports/Table2_Normality_Stats.csv")
+    df_normality.index = df_normality.index.map(display_label)
+    return df_normality
 
-### Create Table 2
-# ==============================================================================
-# 1. Define the necessary columns and statistics (Non-Parametric)
-# ==============================================================================
-all_metrics = [
+
+# -------------------------------------------------------------------------
+# Table 2: median (IQR) by TG category and genotype, with Mann-Whitney p-values
+# -------------------------------------------------------------------------
+TABLE2_ALL_METRICS = [
     "TG",
     "ApoB",
     "NonHDLC",
@@ -583,313 +446,290 @@ all_metrics = [
     "TG/ApoB",
 ]
 
-# The final row MultiIndex structure
-row_index_tuples = [
-    ("", "count"),
-    *[(m, "median") for m in all_metrics],
-    *[(m, "IQR1") for m in all_metrics],
-    *[(m, "IQR3") for m in all_metrics],
-]
 
-# NOTE: We keep this structure for initial construction, then re-sort later
-final_row_index = pd.MultiIndex.from_tuples(
-    row_index_tuples, names=["Metric", "Statistic"]
-)
-
-# The final column MultiIndex structure
-tg_categories = ["TG <180 mg/dL", "TG 180-349 mg/dL", "TG ≥350 mg/dL"]
-genotype_cols = ["ε2ε2", "No ε2", "p-value"]
-column_index_tuples = [
-    (tg_cat, col) for tg_cat in tg_categories for col in genotype_cols
-]
-final_column_index = pd.MultiIndex.from_tuples(
-    column_index_tuples, names=["TG Group", "Genotype"]
-)
-
-
-# ==============================================================================
-# 3. Function to calculate statistics and p-value (Mann-Whitney U)
-# ==============================================================================
-def calculate_stats_and_pvalue(df_group, metric):
-    """
-    Calculates summary statistics (Median/IQR) and the p-value (Mann-Whitney U test)
-    for a given metric within a TG group.
-    """
+def _median_iqr_and_pvalue(df_group, metric):
+    """Median/IQR per genotype plus the Mann-Whitney U p-value, for one metric."""
     stats_dict = {}
+    e2e2_data = df_group[df_group[GENOTYPE_COL] == EPSILON2_HOMOZYGOTE][metric].dropna()
+    not_e2e2_data = df_group[df_group[GENOTYPE_COL] == NO_EPSILON2][metric].dropna()
 
-    # Split the data by genotype
-    e2e2_data = df_group[df_group["ε2 Status"] == "ε2ε2"][metric].dropna()
-    not_e2e2_data = df_group[df_group["ε2 Status"] == "No ε2"][metric].dropna()
-
-    # Calculate statistics (Median and IQR for all)
-    for group_name, data in [("ε2ε2", e2e2_data), ("No ε2", not_e2e2_data)]:
+    for group_name, data in [(EPSILON2_HOMOZYGOTE, e2e2_data), (NO_EPSILON2, not_e2e2_data)]:
         stats_dict[("median", group_name)] = data.median()
         q1, q3 = data.quantile([0.25, 0.75]).tolist()
         stats_dict[("IQR1", group_name)] = q1
         stats_dict[("IQR3", group_name)] = q3
 
-    # Statistical Testing Logic: Mann-Whitney U test for all
     if len(e2e2_data) < 3 or len(not_e2e2_data) < 3:
         p_value = np.nan
     else:
-        _, p_value = stats.mannwhitneyu(
-            e2e2_data, not_e2e2_data, alternative="two-sided"
-        )
-
-    # Store p-value: it applies to the 'median' row for all variables
+        _, p_value = stats.mannwhitneyu(e2e2_data, not_e2e2_data, alternative="two-sided")
     stats_dict[("median", "p-value")] = p_value
-
     return stats_dict
 
 
-# ==============================================================================
-# 4. Generate the Final DataFrame
-# ==============================================================================
-final_data = {}
-for metric_stat_tuple in final_row_index:
-    final_data[metric_stat_tuple] = {}
+def build_table2(df):
+    """Median (IQR) for key metrics by TG category and genotype, with p-values."""
+    row_index_tuples = [
+        ("", "count"),
+        *[(m, "median") for m in TABLE2_ALL_METRICS],
+        *[(m, "IQR1") for m in TABLE2_ALL_METRICS],
+        *[(m, "IQR3") for m in TABLE2_ALL_METRICS],
+    ]
+    final_row_index = pd.MultiIndex.from_tuples(row_index_tuples, names=["Metric", "Statistic"])
 
-# 4.1 Handle the special 'count' row first
-count_row_key = ("", "count")
-for tg_cat in tg_categories:
-    df_group = UKB_E2_df[UKB_E2_df["TG_category"] == tg_cat]
-    count_e2e2 = len(df_group[df_group["ε2 Status"] == "ε2ε2"])
-    count_not_e2e2 = len(df_group[df_group["ε2 Status"] == "No ε2"])
-
-    final_data[count_row_key][(tg_cat, "ε2ε2")] = count_e2e2
-    final_data[count_row_key][(tg_cat, "No ε2")] = count_not_e2e2
-    final_data[count_row_key][(tg_cat, "p-value")] = np.nan
-
-# 4.2 Loop through all metrics (now treated uniformly)
-for tg_cat in tg_categories:
-    df_group = UKB_E2_df[UKB_E2_df["TG_category"] == tg_cat]
-
-    for metric in all_metrics:
-        stats_results = calculate_stats_and_pvalue(df_group, metric)
-        for (stat, col_name), value in stats_results.items():
-            if (metric, stat) in final_data:
-                final_data[(metric, stat)][(tg_cat, col_name)] = value
-
-
-# 5. Restructure the final data into the DataFrame
-df_final = pd.DataFrame(index=final_row_index, columns=final_column_index)
-
-for (metric, stat), col_data in final_data.items():
-    for (tg_group, genotype_col), value in col_data.items():
-        df_final.loc[(metric, stat), (tg_group, genotype_col)] = value
-
-df_final = df_final.fillna(np.nan)
-
-
-# ==============================================================================
-# 6. Apply Formatting, Clean Up, RENAME, and SORT for Display
-# ==============================================================================
-# 1. Rename df_display to Table2_df
-Table2_df = df_final.copy()
-Table2_df = Table2_df.apply(pd.to_numeric, errors="ignore")
-
-# 2. Sort by 'Metric' to group median/IQR rows together
-# Note: The count row (Metric="") must be manually handled to stay at the top.
-count_row = Table2_df.loc[("", "count")].to_frame().T
-data_rows = Table2_df.drop(index=[("", "count")])
-
-# Sort the remaining data rows by the outer index level ('Metric')
-data_rows_sorted = data_rows.sort_index(level="Metric", kind="stable")
-
-# Recombine the data frame with the count row at the top
-Table2_df = pd.concat([count_row, data_rows_sorted])
-
-
-# 3. Standard Formatting
-data_cols = [col for col in Table2_df.columns if col[1] in ["ε2ε2", "No ε2"]]
-p_value_cols = [col for col in Table2_df.columns if col[1] == "p-value"]
-count_index = ("", "count")
-
-# Format data columns to 2 decimal places
-Table2_df[data_cols] = Table2_df[data_cols].round(2)
-
-# Format the 'count' row as integers and clear its p-value
-if count_index in Table2_df.index:
-    Table2_df.loc[count_index, data_cols] = (
-        Table2_df.loc[count_index, data_cols].astype(float).round(0).astype(int)
-    )
-    Table2_df.loc[count_index, p_value_cols] = np.nan
-
-
-# Function to format p-values
-def format_p_value(p):
-    if pd.isna(p):
-        return ""
-    elif p < 0.0001:
-        return "<0.0001"
-    else:
-        return f"{p:.4f}"
-
-
-Table2_df[p_value_cols] = Table2_df[p_value_cols].applymap(format_p_value)
-
-# Replace any remaining NaNs with an empty string
-Table2_df = Table2_df.fillna("")
-
-Table2_df = Table2_df.rename(index=display_label, level=0)
-Table2_df.to_csv("../../reports/Table2.csv")
-
-
-# -------------------------------------------------------
-# Table 3: msLDLC, msVLDLC, esVLDLC1, esVLDLC2 by TG category and ε2 Status
-# -------------------------------------------------------
-table3_cols = ["msLDLC", "msVLDLC", "esVLDLC1", "esVLDLC2"]
-
-table3 = UKB_E2_df.groupby(["TG_category", "ε2 Status"])[table3_cols].describe()
-
-table3.to_csv("../../reports/Table3_LDLC_VLDLC_Comparison.csv")
-table3.to_excel("../../reports/Table3_LDLC_VLDLC_Comparison.xlsx")
-
-
-# -------------------------------------------------------
-# Figure 1: Boxplots of esVLDLC/TG, esVLDLC/msLDLC, pApoB/mApoB and nonHDLC/ApoB  by TG category and ApoE2/E2 status
-# -------------------------------------------------------
-# --- Configuration & Setup ---
-subplot_titles = [
-    r"A",
-    r"B",
-    r"C",
-    r"D",
-    r"E",
-    r"F",
-]
-category_labels = ["<180", "180-349", "≥350"]
-y_labels = [
-    r"esVLDLC/TG",
-    r"nonHDLC/ApoB",
-    r"ApoB/eApoB",
-    r"esVLDLC/msLDLC",
-    r"TG/ApoB",
-    r"ApoB",
-]
-
-# Create a figure with a 3x2 grid of subplots
-fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(12, 12), sharex=True)
-all_axes = axes.flatten()
-
-
-# --- Plotting Loop ---
-for i, (ax, y_col) in enumerate(zip(all_axes, y_labels)):
-    # Create the boxplot without outliers
-    sns.boxplot(
-        data=UKB_E2_df,
-        x="TG_category",
-        y=y_col,
-        hue="ε2 Status",
-        ax=ax,
-        showfliers=False,
+    genotype_cols = [EPSILON2_HOMOZYGOTE, NO_EPSILON2, "p-value"]
+    column_index_tuples = [
+        (tg_cat, col) for tg_cat in TG_CATEGORY_LABELS for col in genotype_cols
+    ]
+    final_column_index = pd.MultiIndex.from_tuples(
+        column_index_tuples, names=["TG Group", "Genotype"]
     )
 
-    # Set axis properties
-    ax.set_title(subplot_titles[i], fontsize=14, pad=8, loc="left", fontweight="bold")
-    ax.set_ylabel(display_label(y_labels[i]), fontsize=14)
-    ax.set_xlabel("")
-    ax.set_xticklabels(category_labels)
-    ax.tick_params(axis="x", labelsize=12)
+    final_data = {key: {} for key in final_row_index}
 
-    # Add X label only to bottom subplots
-    if i in [4, 5]:
-        ax.set_xlabel("TG Group (mg/dL)", fontsize=14, labelpad=12)
+    count_row_key = ("", "count")
+    for tg_cat in TG_CATEGORY_LABELS:
+        df_group = df[df["TG_category"] == tg_cat]
+        final_data[count_row_key][(tg_cat, EPSILON2_HOMOZYGOTE)] = (
+            df_group[GENOTYPE_COL] == EPSILON2_HOMOZYGOTE
+        ).sum()
+        final_data[count_row_key][(tg_cat, NO_EPSILON2)] = (
+            df_group[GENOTYPE_COL] == NO_EPSILON2
+        ).sum()
+        final_data[count_row_key][(tg_cat, "p-value")] = np.nan
 
-    # Handle legend
-    if i == 1:
-        # Keep legend only in subplot B
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles, labels, title="", loc="upper left")
-    else:
-        # Remove legend from other subplots
-        ax.get_legend().remove()
+    for tg_cat in TG_CATEGORY_LABELS:
+        df_group = df[df["TG_category"] == tg_cat]
+        for metric in TABLE2_ALL_METRICS:
+            for (stat, col_name), value in _median_iqr_and_pvalue(df_group, metric).items():
+                if (metric, stat) in final_data:
+                    final_data[(metric, stat)][(tg_cat, col_name)] = value
 
-# Adjust layout and show plot
-plt.tight_layout()
-plt.subplots_adjust(hspace=0.18, wspace=0.18)
-plt.show()
+    df_final = pd.DataFrame(index=final_row_index, columns=final_column_index)
+    for (metric, stat), col_data in final_data.items():
+        for (tg_group, genotype_col), value in col_data.items():
+            df_final.loc[(metric, stat), (tg_group, genotype_col)] = value
+    df_final = df_final.fillna(np.nan)
+
+    table2 = df_final.copy()
+    table2 = table2.apply(pd.to_numeric, errors="coerce")
+
+    # Keep the count row pinned at the top; sort everything else by Metric.
+    count_row = table2.loc[("", "count")].to_frame().T
+    data_rows = table2.drop(index=[("", "count")])
+    data_rows_sorted = data_rows.sort_index(level="Metric", kind="stable")
+    table2 = pd.concat([count_row, data_rows_sorted])
+
+    data_cols = [col for col in table2.columns if col[1] in [EPSILON2_HOMOZYGOTE, NO_EPSILON2]]
+    p_value_cols = [col for col in table2.columns if col[1] == "p-value"]
+    count_index = ("", "count")
+
+    table2[data_cols] = table2[data_cols].round(2)
+    if count_index in table2.index:
+        table2.loc[count_index, data_cols] = (
+            table2.loc[count_index, data_cols].astype(float).round(0).astype(int)
+        )
+        table2.loc[count_index, p_value_cols] = np.nan
+
+    table2[p_value_cols] = table2[p_value_cols].map(format_p_value)
+    table2 = table2.fillna("")
+    return table2.rename(index=display_label, level=0)
 
 
-plt.savefig("ukb_boxplots.png", dpi=300, bbox_inches="tight")
+# -------------------------------------------------------------------------
+# Table 3: msLDLC/msVLDLC/esVLDLC1/esVLDLC2 by TG category and genotype
+# -------------------------------------------------------------------------
+TABLE3_COLUMNS = ["msLDLC", "msVLDLC", "esVLDLC1", "esVLDLC2"]
 
 
-# -------------------------------------------------------
-# For each TG category, create histplots of Non-HDLC/ApoB, pApoB/mApoB, esVLDLC/msLDLC and ApoB by ApoE2/E2 status
-# -------------------------------------------------------
-plt.rcParams.update({"font.size": 14})
-LEGEND_TITLE = "Genotype"
-CATEGORIES = ["TG <180 mg/dL", "TG 180-349 mg/dL", "TG ≥350 mg/dL"]
-PARAMETERS = ["ApoB/eApoB", "nonHDLC/ApoB", "esVLDLC/msLDLC", "ApoB"]
+def build_table3(df):
+    """Mean/SD comparison of msLDLC, msVLDLC, esVLDLC1, esVLDLC2 by TG category and genotype."""
+    return df.groupby(["TG_category", GENOTYPE_COL])[TABLE3_COLUMNS].describe()
 
-# Create 4x3 grid (4 rows for parameters, 3 columns for categories)
-fig, axes = plt.subplots(4, 3, figsize=(22, 24), sharey="row")
 
-original_xlim = {}  # (i, j) -> each subplot's auto-scaled x-axis limits
+# -------------------------------------------------------------------------
+# Figure 1: distributions of TG/ApoB/NonHDLC-derived metrics, by genotype
+# -------------------------------------------------------------------------
+DISTRIBUTION_PARAMETERS = ["TG", "ApoB", "NonHDLC", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/TG"]
+DISTRIBUTION_SUBPLOT_LABELS = ["A", "B", "C", "D", "E", "F"]
 
-for i in range(4):  # rows (parameters)
-    for j in range(3):  # columns (categories)
-        ax = axes[i, j]
-        parameter = PARAMETERS[i]
-        category = CATEGORIES[j]
 
-        subset = UKB_E2_df[(UKB_E2_df["TG_category"] == category)]
+def make_figure_distributions(df):
+    """6-panel step-histogram grid comparing TG/ApoB/NonHDLC-derived metrics by genotype."""
+    fig, axes = plt.subplots(3, 2, figsize=(22, 24))
 
-        # Determine if the legend should be shown (top-right subplot)
-        show_legend_bool = i == 0 and j == 2
-
+    for ax, label, parameter in zip(
+        axes.flatten(), DISTRIBUTION_SUBPLOT_LABELS, DISTRIBUTION_PARAMETERS
+    ):
         sns.histplot(
-            data=subset,
+            data=df,
             x=parameter,
-            hue="ε2 Status",
+            hue=GENOTYPE_COL,
             element="step",
             stat="density",
             common_norm=False,
             ax=ax,
-            legend=show_legend_bool,
         )
-
-        original_xlim[i, j] = ax.get_xlim()
-
-        # Remove individual subplot titles
-        ax.set_title("")
-        ax.set_xlabel("")
+        ax.set_title(label, fontsize=14, pad=8, loc="left", fontweight="bold")
+        ax.set_xlabel(display_label(parameter))
         ax.set_ylabel("")
 
-        # Add column titles (only for top row)
-        if i == 0:
-            ax.set_title(category, fontsize=18, fontweight="bold", pad=10)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.16)
+    return fig
 
-        # Add row titles (only for first column)
-        if j == 0:
-            ax.set_title(
-                ["A", "B", "C", "D"][i],
-                fontsize=14,
-                pad=8,
-                loc="left",
-                fontweight="bold",
+
+# -------------------------------------------------------------------------
+# Figure 2: boxplots of key lipid ratios by TG category and genotype
+# -------------------------------------------------------------------------
+BOXPLOT_Y_COLUMNS = ["esVLDLC/TG", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/msLDLC", "TG/ApoB", "ApoB"]
+BOXPLOT_SUBPLOT_LABELS = ["A", "B", "C", "D", "E", "F"]
+BOXPLOT_CATEGORY_TICK_LABELS = ["<180", "180-349", "≥350"]
+
+
+def make_figure_boxplots(df):
+    """3x2 grid of boxplots for key lipid ratios by TG category and genotype."""
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(12, 12), sharex=True)
+
+    for i, (ax, y_col) in enumerate(zip(axes.flatten(), BOXPLOT_Y_COLUMNS)):
+        sns.boxplot(
+            data=df,
+            x="TG_category",
+            y=y_col,
+            hue=GENOTYPE_COL,
+            ax=ax,
+            showfliers=False,
+        )
+        ax.set_title(
+            BOXPLOT_SUBPLOT_LABELS[i], fontsize=14, pad=8, loc="left", fontweight="bold"
+        )
+        ax.set_ylabel(display_label(y_col), fontsize=14)
+        ax.set_xlabel("")
+        ax.set_xticklabels(BOXPLOT_CATEGORY_TICK_LABELS)
+        ax.tick_params(axis="x", labelsize=12)
+
+        if i in (4, 5):
+            ax.set_xlabel("TG Group (mg/dL)", fontsize=14, labelpad=12)
+
+        if i == 1:
+            # Keep a legend only in subplot B; it applies to all subplots.
+            handles, labels = ax.get_legend_handles_labels()
+            ax.legend(handles, labels, title="", loc="upper left")
+        else:
+            ax.get_legend().remove()
+
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.18, wspace=0.18)
+    return fig
+
+
+# -------------------------------------------------------------------------
+# Figure 3: per-TG-category histograms, standardised x-axes
+# -------------------------------------------------------------------------
+TG_GRID_PARAMETERS = ["ApoB/eApoB", "nonHDLC/ApoB", "esVLDLC/msLDLC", "ApoB"]
+TG_GRID_ROW_LABELS = ["A", "B", "C", "D"]
+
+
+def make_figure_tg_category_grid(df):
+    """4x3 grid of histograms (rows=metric, columns=TG category) with standardised x-axes.
+
+    Rows A (ApoB/eApoB) and B (nonHDLC/ApoB) use the TG>=350 column's x-axis
+    for all three columns; row C (esVLDLC/msLDLC) takes its lower limit from
+    the TG<180 column and its upper limit from the TG 180-349 column; row D
+    (ApoB) is left on auto-scaling since its columns already line up.
+    """
+    fig, axes = plt.subplots(4, 3, figsize=(22, 24), sharey="row")
+    original_xlim = {}
+
+    for i, parameter in enumerate(TG_GRID_PARAMETERS):
+        for j, category in enumerate(TG_CATEGORY_LABELS):
+            ax = axes[i, j]
+            subset = df[df["TG_category"] == category]
+            show_legend = i == 0 and j == 2
+
+            sns.histplot(
+                data=subset,
+                x=parameter,
+                hue=GENOTYPE_COL,
+                element="step",
+                stat="density",
+                common_norm=False,
+                ax=ax,
+                legend=show_legend,
             )
-            ax.set_ylabel(
-                display_label(parameter), fontsize=18, fontweight="bold", labelpad=10
-            )
 
-        # Legend customization
-        if show_legend_bool:
-            legend = ax.get_legend()
-            legend.set_title(LEGEND_TITLE)
+            original_xlim[i, j] = ax.get_xlim()
 
-# Standardise x-axes across categories (columns) within a row, using each
-# subplot's own auto-scaled limits captured above: rows A (ApoB/eApoB) and
-# B (nonHDLC/ApoB) take the 3rd column's (TG>=350) limits for all columns;
-# row C (esVLDLC/msLDLC) takes the lower limit from column 1 (TG<180) and the
-# upper limit from column 2 (TG 180-349); row D (ApoB) is left as-is.
-for i in range(3):
-    if i in (0, 1):
-        xlim = original_xlim[i, 2]
-    else:
-        xlim = (original_xlim[i, 0][0], original_xlim[i, 1][1])
-    for j in range(3):
-        axes[i, j].set_xlim(xlim)
+            ax.set_title("")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
 
-plt.tight_layout()
-plt.show()
+            if i == 0:
+                ax.set_title(category, fontsize=18, fontweight="bold", pad=10)
+
+            if j == 0:
+                ax.set_title(
+                    TG_GRID_ROW_LABELS[i], fontsize=14, pad=8, loc="left", fontweight="bold"
+                )
+                ax.set_ylabel(
+                    display_label(parameter), fontsize=18, fontweight="bold", labelpad=10
+                )
+
+            if show_legend:
+                ax.get_legend().set_title("Genotype")
+
+    for i in range(3):
+        if i in (0, 1):
+            xlim = original_xlim[i, 2]
+        else:
+            xlim = (original_xlim[i, 0][0], original_xlim[i, 1][1])
+        for j in range(3):
+            axes[i, j].set_xlim(xlim)
+
+    fig.tight_layout()
+    return fig
+
+
+# -------------------------------------------------------------------------
+# Main
+# -------------------------------------------------------------------------
+def main():
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    df = load_data(DATA_PATH)
+    df = add_genotype_columns(df)
+    df = clean_cohort(df)
+    df = engineer_features(df)
+
+    plt.rcParams.update({"font.size": 18})
+    fig_distributions = make_figure_distributions(df)
+    fig_distributions.savefig(
+        REPORTS_DIR / "Figure1_distributions.png", dpi=300, bbox_inches="tight"
+    )
+    plt.show()
+
+    print_normality_diagnostics(df, NORMALITY_DIAGNOSTIC_COLUMNS)
+
+    build_table1b(df).to_csv(REPORTS_DIR / "Table1b_Numerical.csv")
+    build_table1a(df).to_csv(REPORTS_DIR / "Table1a_Categorical.csv")
+    build_table2_normality(df).to_csv(REPORTS_DIR / "Table2_Normality_Stats.csv")
+    build_table2(df).to_csv(REPORTS_DIR / "Table2.csv")
+
+    table3 = build_table3(df)
+    table3.to_csv(REPORTS_DIR / "Table3_LDLC_VLDLC_Comparison.csv")
+    table3.to_excel(REPORTS_DIR / "Table3_LDLC_VLDLC_Comparison.xlsx")
+
+    plt.rcParams.update({"font.size": 14})
+    fig_boxplots = make_figure_boxplots(df)
+    fig_boxplots.savefig(REPORTS_DIR / "Figure2_boxplots.png", dpi=300, bbox_inches="tight")
+    plt.show()
+
+    fig_tg_grid = make_figure_tg_category_grid(df)
+    fig_tg_grid.savefig(
+        REPORTS_DIR / "Figure3_tg_category_histograms.png", dpi=300, bbox_inches="tight"
+    )
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()

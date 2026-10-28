@@ -69,19 +69,19 @@ Due to privacy restrictions, the raw UK Biobank data cannot be shared publicly. 
 
 ## Usage
 
-Run the full analysis from the repository root:
+Run the script from anywhere - paths are resolved relative to the script's
+own location, not the working directory:
 
 ```bash
-cd src/data
-python E2E2_progressivedisease.py
+python src/data/E2E2_progressivedisease.py
 ```
 
-This produces, in `reports/`:
+Each table and figure is also displayed interactively as it's produced, and
+written to `reports/`:
 - `Table1a_Categorical.csv`, `Table1b_Numerical.csv`: Descriptive statistics by genotype
 - `Table2.csv`, `Table2_Normality_Stats.csv`: Stratified analysis by TG category
-- `Table3_LDLC_VLDLC_Comparison.csv`: Comparison of LDL-C/VLDL-C estimation equations by TG category and genotype
-
-and displays the histogram and boxplot figures used in the manuscript.
+- `Table3_LDLC_VLDLC_Comparison.csv` / `.xlsx`: Comparison of the LDL-C/VLDL-C estimation equations by TG category and genotype
+- `Figure1_distributions.png`, `Figure2_boxplots.png`, `Figure3_tg_category_histograms.png`: The manuscript's figures
 
 ## Methods
 
