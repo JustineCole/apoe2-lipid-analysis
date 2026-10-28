@@ -5,7 +5,7 @@
 
 ## Overview
 
-This repository contains the analysis code for the manuscript **"Dyslipidemia in Apolipoprotein E2 Homozygotes"** investigating lipid parameter differences between ApoE2/E2 and non-ApoE2/E2 individuals across different triglyceride categories.
+This repository contains the analysis code for the manuscript **"Dyslipidemia in Apolipoprotein E2 Homozygotes"** investigating lipid parameter differences between ApoE2/E2 homozygotes and individuals with no ε2 allele, across different triglyceride categories. ApoE2 heterozygotes are excluded from the comparison.
 
 ## Citation
 
@@ -77,11 +77,17 @@ python src/data/E2E2_progressivedisease.py
 ```
 
 Each table and figure is also displayed interactively as it's produced, and
-written to `reports/`:
-- `Table1a_Categorical.csv`, `Table1b_Numerical.csv`: Descriptive statistics by genotype
-- `Table2.csv`, `Table2_Normality_Stats.csv`: Stratified analysis by TG category
-- `Table3_LDLC_VLDLC_Comparison.csv` / `.xlsx`: Comparison of the LDL-C/VLDL-C estimation equations by TG category and genotype
-- `Figure1_distributions.png`, `Figure2_boxplots.png`, `Figure3_tg_category_histograms.png`: The manuscript's figures
+written to `reports/`. Table and figure numbers match the manuscript (whose
+Table 1 comes from a different source and isn't produced here):
+- `Table2_Categorical.csv`, `Table3_Numerical.csv`: Descriptive statistics by genotype (manuscript Tables 2-3)
+- `Table4.csv`: Stratified analysis by TG category (manuscript Table 4)
+- `Figure1_boxplots.png`, `Figure2_tg_category_histograms.png`: The manuscript's figures
+
+Plus three supporting outputs considered during analysis but not published
+in the manuscript:
+- `SupplementalFigure1_distributions.png`: Exploratory distributions by genotype
+- `Table4_Normality.csv`: The normality diagnostics behind Table 4
+- `Table5_EquationComparison.csv` / `.xlsx`: A comparison of the two esVLDLC equations (`esVLDLC1`/`esVLDLC2`) by TG category and genotype
 
 ## Methods
 

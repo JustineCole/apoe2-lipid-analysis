@@ -1,10 +1,16 @@
 """Dyslipidemia analysis in ApoE2/E2 homozygotes (UK Biobank).
 
-Compares lipid parameters between ApoE2/E2 homozygotes ("ε2ε2") and everyone
-else ("No ε2") -- ApoE2 heterozygotes are excluded, since their lipid profile
-is intermediate and not the comparison of interest -- across three
-triglyceride (TG) categories. Produces the manuscript's summary tables
-(Table 1-3) and figures from the raw UK Biobank extract.
+Compares lipid parameters between ApoE2/E2 homozygotes ("ε2ε2") and those
+with no ε2 allele ("No ε2") -- ApoE2 heterozygotes are excluded, since their
+lipid profile is intermediate and not the comparison of interest -- across
+three triglyceride (TG) categories.
+
+Produces the manuscript's Tables 2-4 and Figures 1-2 from the raw UK
+Biobank extract (the manuscript's Table 1 comes from a different source and
+isn't produced here), plus three supporting outputs not published in the
+manuscript: Supplemental Figure 1 (exploratory distributions),
+Table4_Normality (the normality diagnostics behind Table 4), and
+Table5_EquationComparison (a comparison of the two esVLDLC equations).
 
 Derived lipid metrics
 ----------------------
@@ -15,8 +21,8 @@ Derived lipid metrics
   population equation, hence the separate genotype-specific equations.
 - esVLDLC1 / esVLDLC2: the same two genotype-specific equations, each
   applied to every individual regardless of their genotype, so the two
-  equations can be compared directly (see Table 3) rather than only ever
-  seeing the genotype-matched value.
+  equations can be compared directly (see Table5_EquationComparison)
+  rather than only ever seeing the genotype-matched value.
 - eApoB: Sampson-equation estimate of apolipoprotein B.
 
 Usage
@@ -69,7 +75,6 @@ DISPLAY_LABEL_REPLACEMENTS = [
     ("esVLDLC", "VLDL-C"),
     ("msLDLC", "LDL-C"),
     ("NonHDLC", "Non-HDL-C"),
-    ("nonHDLC", "Non-HDL-C"),
     ("HDLC", "HDL-C"),
 ]
 
@@ -219,7 +224,7 @@ def engineer_features(df):
     df["esVLDLC/msLDLC"] = df["esVLDLC"] / df["msLDLC"]
     df["msLDLC/dLDLC"] = df["msLDLC"] / df["direct LDLC"]
     df["ApoB/eApoB"] = df["ApoB"] / df["eApoB"]
-    df["nonHDLC/ApoB"] = df["NonHDLC"] / df["ApoB"]
+    df["NonHDLC/ApoB"] = df["NonHDLC"] / df["ApoB"]
     df["TG/ApoB"] = df["TG"] / df["ApoB"]
 
     df["TG_category"] = pd.cut(
@@ -243,7 +248,7 @@ NORMALITY_DIAGNOSTIC_COLUMNS = [
     "esVLDLC/TG",
     "esVLDLC/msLDLC",
     "ApoB/eApoB",
-    "nonHDLC/ApoB",
+    "NonHDLC/ApoB",
     "TG/ApoB",
 ]
 
@@ -276,9 +281,9 @@ def print_normality_diagnostics(df, columns):
 
 
 # -------------------------------------------------------------------------
-# Table 1a: categorical variables by genotype
+# Table 2: categorical variables by genotype (manuscript Table 2)
 # -------------------------------------------------------------------------
-def build_table1a(df):
+def build_table2(df):
     """Counts/percentages for categorical variables by genotype, with chi-squared p-values."""
     cols_to_summarize = ["Sex", "Current smoker", "diabetes by lab or doctor"]
 
@@ -313,9 +318,9 @@ def build_table1a(df):
 
 
 # -------------------------------------------------------------------------
-# Table 1b: numerical variables by genotype
+# Table 3: numerical variables by genotype (manuscript Table 3)
 # -------------------------------------------------------------------------
-TABLE1B_NUMERIC_COLUMNS = [
+TABLE3_NUMERIC_COLUMNS = [
     "Age",
     "ApoB",
     "HDLC",
@@ -327,39 +332,39 @@ TABLE1B_NUMERIC_COLUMNS = [
     "esVLDLC/TG",
     "esVLDLC/msLDLC",
     "ApoB/eApoB",
-    "nonHDLC/ApoB",
+    "NonHDLC/ApoB",
     "TG/ApoB",
 ]
-TABLE1B_NON_PARAMETRIC_COLUMNS = ["TG", "esVLDLC", "esVLDLC/TG", "esVLDLC/msLDLC", "TG/ApoB"]
+TABLE3_NON_PARAMETRIC_COLUMNS = ["TG", "esVLDLC", "esVLDLC/TG", "esVLDLC/msLDLC", "TG/ApoB"]
 
 
-def build_table1b(df):
+def build_table3(df):
     """Descriptive stats (mean/SD etc.) for numeric variables by genotype, with p-values."""
-    table1 = (
-        df[[GENOTYPE_COL] + TABLE1B_NUMERIC_COLUMNS].groupby(GENOTYPE_COL).describe().T
+    table3 = (
+        df[[GENOTYPE_COL] + TABLE3_NUMERIC_COLUMNS].groupby(GENOTYPE_COL).describe().T
     )
 
     genotypes = df[GENOTYPE_COL].unique()
     p_values = []
-    for var in table1.index.get_level_values(0).unique():
+    for var in table3.index.get_level_values(0).unique():
         group1 = df[df[GENOTYPE_COL] == genotypes[0]][var].dropna()
         group2 = df[df[GENOTYPE_COL] == genotypes[1]][var].dropna()
 
-        if var in TABLE1B_NON_PARAMETRIC_COLUMNS:
+        if var in TABLE3_NON_PARAMETRIC_COLUMNS:
             _, p_val = stats.mannwhitneyu(group1, group2, alternative="two-sided")
         else:
             _, p_val = stats.ttest_ind(group1, group2, equal_var=False)
 
-        p_values.extend([p_val] * len(table1.loc[var]))
+        p_values.extend([p_val] * len(table3.loc[var]))
 
-    table1["p-value"] = p_values
-    return table1.rename(index=display_label, level=0)
+    table3["p-value"] = p_values
+    return table3.rename(index=display_label, level=0)
 
 
 # -------------------------------------------------------------------------
-# Table 2 (normality diagnostics): Shapiro-Wilk by TG category and genotype
+# Table4_Normality (unpublished): Shapiro-Wilk diagnostics behind Table 4
 # -------------------------------------------------------------------------
-TABLE2_METRICS = [
+TABLE4_NORMALITY_METRICS = [
     "ApoB",
     "TG",
     "NonHDLC",
@@ -368,15 +373,15 @@ TABLE2_METRICS = [
     "esVLDLC/TG",
     "esVLDLC/msLDLC",
     "ApoB/eApoB",
-    "nonHDLC/ApoB",
+    "NonHDLC/ApoB",
     "TG/ApoB",
 ]
 
 
-def build_table2_normality(df):
+def build_table4_normality(df):
     """Shapiro-Wilk normality diagnostics for key metrics, by TG category and genotype."""
     results = []
-    for metric in TABLE2_METRICS:
+    for metric in TABLE4_NORMALITY_METRICS:
         row = {"Metric": metric}
         for tg_cat in TG_CATEGORY_LABELS:
             df_group_tg = df[df["TG_category"] == tg_cat]
@@ -430,9 +435,9 @@ def build_table2_normality(df):
 
 
 # -------------------------------------------------------------------------
-# Table 2: median (IQR) by TG category and genotype, with Mann-Whitney p-values
+# Table 4: median (IQR) by TG category and genotype (manuscript Table 4)
 # -------------------------------------------------------------------------
-TABLE2_ALL_METRICS = [
+TABLE4_METRICS = [
     "TG",
     "ApoB",
     "NonHDLC",
@@ -442,7 +447,7 @@ TABLE2_ALL_METRICS = [
     "esVLDLC/msLDLC",
     "msLDLC/dLDLC",
     "ApoB/eApoB",
-    "nonHDLC/ApoB",
+    "NonHDLC/ApoB",
     "TG/ApoB",
 ]
 
@@ -467,13 +472,13 @@ def _median_iqr_and_pvalue(df_group, metric):
     return stats_dict
 
 
-def build_table2(df):
+def build_table4(df):
     """Median (IQR) for key metrics by TG category and genotype, with p-values."""
     row_index_tuples = [
         ("", "count"),
-        *[(m, "median") for m in TABLE2_ALL_METRICS],
-        *[(m, "IQR1") for m in TABLE2_ALL_METRICS],
-        *[(m, "IQR3") for m in TABLE2_ALL_METRICS],
+        *[(m, "median") for m in TABLE4_METRICS],
+        *[(m, "IQR1") for m in TABLE4_METRICS],
+        *[(m, "IQR3") for m in TABLE4_METRICS],
     ]
     final_row_index = pd.MultiIndex.from_tuples(row_index_tuples, names=["Metric", "Statistic"])
 
@@ -500,7 +505,7 @@ def build_table2(df):
 
     for tg_cat in TG_CATEGORY_LABELS:
         df_group = df[df["TG_category"] == tg_cat]
-        for metric in TABLE2_ALL_METRICS:
+        for metric in TABLE4_METRICS:
             for (stat, col_name), value in _median_iqr_and_pvalue(df_group, metric).items():
                 if (metric, stat) in final_data:
                     final_data[(metric, stat)][(tg_cat, col_name)] = value
@@ -511,46 +516,46 @@ def build_table2(df):
             df_final.loc[(metric, stat), (tg_group, genotype_col)] = value
     df_final = df_final.fillna(np.nan)
 
-    table2 = df_final.copy()
-    table2 = table2.apply(pd.to_numeric, errors="coerce")
+    table4 = df_final.copy()
+    table4 = table4.apply(pd.to_numeric, errors="coerce")
 
     # Keep the count row pinned at the top; sort everything else by Metric.
-    count_row = table2.loc[("", "count")].to_frame().T
-    data_rows = table2.drop(index=[("", "count")])
+    count_row = table4.loc[("", "count")].to_frame().T
+    data_rows = table4.drop(index=[("", "count")])
     data_rows_sorted = data_rows.sort_index(level="Metric", kind="stable")
-    table2 = pd.concat([count_row, data_rows_sorted])
+    table4 = pd.concat([count_row, data_rows_sorted])
 
-    data_cols = [col for col in table2.columns if col[1] in [EPSILON2_HOMOZYGOTE, NO_EPSILON2]]
-    p_value_cols = [col for col in table2.columns if col[1] == "p-value"]
+    data_cols = [col for col in table4.columns if col[1] in [EPSILON2_HOMOZYGOTE, NO_EPSILON2]]
+    p_value_cols = [col for col in table4.columns if col[1] == "p-value"]
     count_index = ("", "count")
 
-    table2[data_cols] = table2[data_cols].round(2)
-    if count_index in table2.index:
-        table2.loc[count_index, data_cols] = (
-            table2.loc[count_index, data_cols].astype(float).round(0).astype(int)
+    table4[data_cols] = table4[data_cols].round(2)
+    if count_index in table4.index:
+        table4.loc[count_index, data_cols] = (
+            table4.loc[count_index, data_cols].astype(float).round(0).astype(int)
         )
-        table2.loc[count_index, p_value_cols] = np.nan
+        table4.loc[count_index, p_value_cols] = np.nan
 
-    table2[p_value_cols] = table2[p_value_cols].map(format_p_value)
-    table2 = table2.fillna("")
-    return table2.rename(index=display_label, level=0)
+    table4[p_value_cols] = table4[p_value_cols].map(format_p_value)
+    table4 = table4.fillna("")
+    return table4.rename(index=display_label, level=0)
 
 
 # -------------------------------------------------------------------------
-# Table 3: msLDLC/msVLDLC/esVLDLC1/esVLDLC2 by TG category and genotype
+# Table5_EquationComparison (unpublished): esVLDLC equation comparison
 # -------------------------------------------------------------------------
-TABLE3_COLUMNS = ["msLDLC", "msVLDLC", "esVLDLC1", "esVLDLC2"]
+TABLE5_COLUMNS = ["msLDLC", "msVLDLC", "esVLDLC1", "esVLDLC2"]
 
 
-def build_table3(df):
+def build_table5_equation_comparison(df):
     """Mean/SD comparison of msLDLC, msVLDLC, esVLDLC1, esVLDLC2 by TG category and genotype."""
-    return df.groupby(["TG_category", GENOTYPE_COL])[TABLE3_COLUMNS].describe()
+    return df.groupby(["TG_category", GENOTYPE_COL])[TABLE5_COLUMNS].describe()
 
 
 # -------------------------------------------------------------------------
-# Figure 1: distributions of TG/ApoB/NonHDLC-derived metrics, by genotype
+# Supplemental Figure 1: distributions of TG/ApoB/NonHDLC-derived metrics
 # -------------------------------------------------------------------------
-DISTRIBUTION_PARAMETERS = ["TG", "ApoB", "NonHDLC", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/TG"]
+DISTRIBUTION_PARAMETERS = ["TG", "ApoB", "NonHDLC", "NonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/TG"]
 DISTRIBUTION_SUBPLOT_LABELS = ["A", "B", "C", "D", "E", "F"]
 
 
@@ -580,9 +585,9 @@ def make_figure_distributions(df):
 
 
 # -------------------------------------------------------------------------
-# Figure 2: boxplots of key lipid ratios by TG category and genotype
+# Figure 1: boxplots of key lipid ratios by TG category and genotype
 # -------------------------------------------------------------------------
-BOXPLOT_Y_COLUMNS = ["esVLDLC/TG", "nonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/msLDLC", "TG/ApoB", "ApoB"]
+BOXPLOT_Y_COLUMNS = ["esVLDLC/TG", "NonHDLC/ApoB", "ApoB/eApoB", "esVLDLC/msLDLC", "TG/ApoB", "ApoB"]
 BOXPLOT_SUBPLOT_LABELS = ["A", "B", "C", "D", "E", "F"]
 BOXPLOT_CATEGORY_TICK_LABELS = ["<180", "180-349", "≥350"]
 
@@ -624,16 +629,16 @@ def make_figure_boxplots(df):
 
 
 # -------------------------------------------------------------------------
-# Figure 3: per-TG-category histograms, standardised x-axes
+# Figure 2: per-TG-category histograms, standardised x-axes
 # -------------------------------------------------------------------------
-TG_GRID_PARAMETERS = ["ApoB/eApoB", "nonHDLC/ApoB", "esVLDLC/msLDLC", "ApoB"]
+TG_GRID_PARAMETERS = ["ApoB/eApoB", "NonHDLC/ApoB", "esVLDLC/msLDLC", "ApoB"]
 TG_GRID_ROW_LABELS = ["A", "B", "C", "D"]
 
 
 def make_figure_tg_category_grid(df):
     """4x3 grid of histograms (rows=metric, columns=TG category) with standardised x-axes.
 
-    Rows A (ApoB/eApoB) and B (nonHDLC/ApoB) use the TG>=350 column's x-axis
+    Rows A (ApoB/eApoB) and B (NonHDLC/ApoB) use the TG>=350 column's x-axis
     for all three columns; row C (esVLDLC/msLDLC) takes its lower limit from
     the TG<180 column and its upper limit from the TG 180-349 column; row D
     (ApoB) is left on auto-scaling since its columns already line up.
@@ -704,29 +709,29 @@ def main():
     plt.rcParams.update({"font.size": 18})
     fig_distributions = make_figure_distributions(df)
     fig_distributions.savefig(
-        REPORTS_DIR / "Figure1_distributions.png", dpi=300, bbox_inches="tight"
+        REPORTS_DIR / "SupplementalFigure1_distributions.png", dpi=300, bbox_inches="tight"
     )
     plt.show()
 
     print_normality_diagnostics(df, NORMALITY_DIAGNOSTIC_COLUMNS)
 
-    build_table1b(df).to_csv(REPORTS_DIR / "Table1b_Numerical.csv")
-    build_table1a(df).to_csv(REPORTS_DIR / "Table1a_Categorical.csv")
-    build_table2_normality(df).to_csv(REPORTS_DIR / "Table2_Normality_Stats.csv")
-    build_table2(df).to_csv(REPORTS_DIR / "Table2.csv")
+    build_table2(df).to_csv(REPORTS_DIR / "Table2_Categorical.csv")
+    build_table3(df).to_csv(REPORTS_DIR / "Table3_Numerical.csv")
+    build_table4_normality(df).to_csv(REPORTS_DIR / "Table4_Normality.csv")
+    build_table4(df).to_csv(REPORTS_DIR / "Table4.csv")
 
-    table3 = build_table3(df)
-    table3.to_csv(REPORTS_DIR / "Table3_LDLC_VLDLC_Comparison.csv")
-    table3.to_excel(REPORTS_DIR / "Table3_LDLC_VLDLC_Comparison.xlsx")
+    table5 = build_table5_equation_comparison(df)
+    table5.to_csv(REPORTS_DIR / "Table5_EquationComparison.csv")
+    table5.to_excel(REPORTS_DIR / "Table5_EquationComparison.xlsx")
 
     plt.rcParams.update({"font.size": 14})
     fig_boxplots = make_figure_boxplots(df)
-    fig_boxplots.savefig(REPORTS_DIR / "Figure2_boxplots.png", dpi=300, bbox_inches="tight")
+    fig_boxplots.savefig(REPORTS_DIR / "Figure1_boxplots.png", dpi=300, bbox_inches="tight")
     plt.show()
 
     fig_tg_grid = make_figure_tg_category_grid(df)
     fig_tg_grid.savefig(
-        REPORTS_DIR / "Figure3_tg_category_histograms.png", dpi=300, bbox_inches="tight"
+        REPORTS_DIR / "Figure2_tg_category_histograms.png", dpi=300, bbox_inches="tight"
     )
     plt.show()
 
